@@ -1,0 +1,60 @@
+.container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.recommendationsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.hackathonCard {
+  @apply bg-white p-6 rounded-xl shadow-md border border-gray-100 
+         transition-all duration-200;
+}
+
+.hackathonCard:hover {
+  @apply shadow-lg border-blue-100;
+}
+
+.skills ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.skills li {
+  background-color: #f0f0f0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.matchBadge {
+  @apply px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.matchBadgeHigh {
+  @apply bg-green-100 text-green-800;
+}
+
+.matchBadgeMedium {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.matchBadgeLow {
+  @apply bg-red-100 text-red-800;
+}
+
+.skillTag {
+  @apply bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm
+         hover:bg-gray-200 transition-colors duration-200;
+}
+
+.keywordTag {
+  @apply bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm
+         hover:bg-purple-200 transition-colors duration-200;
+} 
