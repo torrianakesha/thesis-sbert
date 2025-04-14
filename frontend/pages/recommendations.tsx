@@ -13,6 +13,13 @@ interface Hackathon {
   deadline: string;
   keywords: string[];
   match_score: number;
+  evaluation_metrics: {
+    precision: number;
+    recall: number;
+    f1_score: number;
+    cosine_similarity: number;
+    accuracy: number;
+  };
 }
 
 interface User {
@@ -216,6 +223,42 @@ export default function Recommendations() {
                     +{hackathon.requirements.length - 3} more
                   </span>
                 )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h3 className="font-semibold mb-2 text-gray-700">Evaluation Metrics:</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Precision</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {Math.round(hackathon.evaluation_metrics.precision * 100)}%
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Recall</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {Math.round(hackathon.evaluation_metrics.recall * 100)}%
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">F1 Score</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {Math.round(hackathon.evaluation_metrics.f1_score * 100)}%
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Cosine Similarity</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {Math.round(hackathon.evaluation_metrics.cosine_similarity * 100)}%
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600">Accuracy</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    {Math.round(hackathon.evaluation_metrics.accuracy * 100)}%
+                  </p>
+                </div>
               </div>
             </div>
             

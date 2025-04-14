@@ -43,7 +43,10 @@ export default function Settings() {
     e.preventDefault();
     
     const userId = localStorage.getItem('userId');
-    if (!userId) return;
+    if (!userId) {
+      setMessage('Error: User not logged in');
+      return;
+    }
 
     try {
       const response = await fetch(`http://localhost:8000/users/${userId}`, {
@@ -53,19 +56,31 @@ export default function Settings() {
         },
         body: JSON.stringify({
           username: username,
-          skills: skills.split(',').map(skill => skill.trim()),
+          skills: skills.split(',').map(skill => skill.trim()).filter(skill => skill !== ''),
         }),
       });
 
       if (response.ok) {
+        const updatedUser = await response.json();
+        setUser(updatedUser);
         setMessage('Settings updated successfully!');
+        // Clear message after 3 seconds
+        setTimeout(() => setMessage(''), 3000);
       } else {
-        setMessage('Error updating settings');
+        const errorData = await response.json();
+        setMessage(`Error updating settings: ${errorData.detail || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error:', error);
-      setMessage('Error updating settings');
+      setMessage('Error updating settings. Please try again.');
     }
+  };
+
+  const handleLogout = () => {
+    // Clear user data from localStorage
+    localStorage.removeItem('userId');
+    // Redirect to login page
+    router.push('/login');
   };
 
   if (!user) {
@@ -87,22 +102,37 @@ export default function Settings() {
           >
             User Settings
           </motion.h1>
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Link 
-              href="/recommendations" 
-              className="text-blue-500 hover:text-blue-700 flex items-center gap-2
+          <div className="flex gap-4">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Link 
+                href="/recommendations" 
+                className="text-blue-500 hover:text-blue-700 flex items-center gap-2
+                         transition-colors duration-200"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Recommendations
+              </Link>
+            </motion.div>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogout}
+              className="text-red-500 hover:text-red-700 flex items-center gap-2
                        transition-colors duration-200"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              Back to Recommendations
-            </Link>
-          </motion.div>
+              Logout
+            </motion.button>
+          </div>
         </div>
         
         {message && (
