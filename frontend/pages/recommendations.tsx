@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from '../styles/Recommendations.module.css';
+import MetricsExplanation from '../components/MetricsExplanation';
 
 interface Hackathon {
   title: string;
@@ -35,6 +36,8 @@ export default function Recommendations() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedHackathon, setSelectedHackathon] = useState<Hackathon | null>(null);
+  const [showMetrics, setShowMetrics] = useState(false);
 
   const fetchUserData = async (userId: string) => {
     try {
@@ -260,6 +263,23 @@ export default function Recommendations() {
                   </p>
                 </div>
               </div>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedHackathon(hackathon);
+                  setShowMetrics(true);
+                }}
+                className="mt-4 text-blue-500 hover:text-blue-700 flex items-center gap-2
+                         transition-colors duration-200 text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Learn more about these metrics
+              </motion.button>
             </div>
             
             <div className="flex justify-between items-center mt-4">
@@ -288,6 +308,17 @@ export default function Recommendations() {
             Update Skills →
           </Link>
         </motion.div>
+      )}
+
+      {selectedHackathon && (
+        <MetricsExplanation
+          isOpen={showMetrics}
+          onClose={() => {
+            setShowMetrics(false);
+            setSelectedHackathon(null);
+          }}
+          metrics={selectedHackathon.evaluation_metrics}
+        />
       )}
     </motion.div>
   );
