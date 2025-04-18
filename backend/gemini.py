@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import re
 from collections import Counter
 import spacy
+from backend.sbert import SBERTModel
+from functools import lru_cache
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,69 +28,66 @@ class GeminiAPI:
             os.system('python -m spacy download en_core_web_sm')
             self.nlp = spacy.load('en_core_web_sm')
         
+        # Initialize SBERT model
+        self.sbert = SBERTModel()
+        
         # Update tech keywords to match your CSV data
         self.tech_keywords = {
-            'python': ['python', 'django', 'flask', 'fastapi', 'pytorch', 'tensorflow', 'pandas', 'numpy'],
-            'javascript': ['javascript', 'js', 'node.js', 'react', 'vue', 'angular', 'typescript', 'frontend'],
-            'web': ['web', 'frontend', 'backend', 'fullstack', 'html', 'css', 'web development'],
-            'mobile': ['mobile', 'ios', 'android', 'react native', 'flutter', 'app development'],
-            'ai': ['ai', 'artificial intelligence', 'machine learning', 'ml', 'deep learning', 'nlp'],
-            'data': ['data science', 'data analysis', 'big data', 'data visualization', 'analytics'],
-            'cloud': ['aws', 'azure', 'gcp', 'cloud computing', 'serverless', 'cloud'],
-            'devops': ['devops', 'docker', 'kubernetes', 'ci/cd', 'jenkins', 'deployment'],
-            'blockchain': ['blockchain', 'web3', 'smart contracts', 'cryptocurrency', 'crypto'],
-            'security': ['cybersecurity', 'security', 'encryption', 'authentication', 'privacy'],
-            'game': ['game development', 'unity', 'unreal', 'gaming', 'game design'],
-            'ar/vr': ['augmented reality', 'virtual reality', 'ar', 'vr', 'mixed reality'],
-            'iot': ['internet of things', 'iot', 'embedded systems', 'hardware'],
-            'ui/ux': ['ui design', 'ux design', 'user interface', 'user experience', 'design'],
-            'database': ['sql', 'mongodb', 'postgresql', 'mysql', 'database', 'nosql'],
+            "web": ["html", "css", "javascript", "react", "angular", "vue", "node", "express", "django", "flask"],
+            "mobile": ["android", "ios", "flutter", "react native", "swift", "kotlin"],
+            "ai": ["machine learning", "deep learning", "neural networks", "tensorflow", "pytorch", "scikit-learn"],
+            "cloud": ["aws", "azure", "gcp", "docker", "kubernetes", "serverless"],
+            "blockchain": ["ethereum", "solidity", "smart contracts", "web3", "defi"],
+            "data": ["sql", "nosql", "mongodb", "postgresql", "data analysis", "data science"],
+            "security": ["cybersecurity", "penetration testing", "encryption", "authentication", "authorization"]
         }
 
+    @lru_cache(maxsize=1000)
     def extract_keywords(self, text: str) -> List[str]:
-        # Process text with spaCy
+        """Extract keywords from text with caching"""
+        if not text:
+            return []
+        
         doc = self.nlp(text.lower())
+        keywords = set()
         
-        # Extract noun phrases and technical terms
-        keywords = []
+        # Extract named entities and noun phrases
+        for ent in doc.ents:
+            if ent.label_ in ['ORG', 'PRODUCT', 'TECH']:
+                keywords.add(ent.text.lower())
         
-        # Extract from noun chunks
         for chunk in doc.noun_chunks:
-            keywords.append(chunk.text)
+            keywords.add(chunk.text.lower())
         
-        # Add individual technical terms
+        # Extract technical terms
         for token in doc:
             if token.pos_ in ['NOUN', 'PROPN'] and len(token.text) > 2:
-                keywords.append(token.text)
+                keywords.add(token.text.lower())
         
-        # Match with known technology categories
-        tech_matches = []
-        for category, terms in self.tech_keywords.items():
-            for term in terms:
-                if term in text.lower():
-                    tech_matches.append(category)
-                    # Also add the specific term that matched
-                    tech_matches.append(term)
-                    break
-        
-        # Combine and deduplicate
-        all_keywords = list(set(keywords + tech_matches))
-        
-        # Filter out common non-technical words
-        filtered_keywords = [k for k in all_keywords if len(k) > 2]  # Filter out short words
-        
-        return filtered_keywords
+        return list(keywords)
 
-    def calculate_match_score(self, hackathon_keywords: List[str], user_skills: List[str]) -> float:
+    def calculate_match_score(self, hackathon_keywords: List[str], user_skills: List[str]) -> Dict:
         # Convert everything to lowercase and clean
         hackathon_keywords = [k.lower().strip() for k in hackathon_keywords if k]
         user_skills = [s.lower().strip() for s in user_skills if s]
         
-        # Expand user skills with related terms
+        if not hackathon_keywords or not user_skills:
+            return {
+                "match_score": 0.0,
+                "sbert_similarity": 0.0,
+                "skill_matches": {},
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1_score": 0.0
+            }
+        
+        # Use SBERT to analyze skill matches
+        sbert_results = self.sbert.analyze_skill_matches(user_skills, hackathon_keywords)
+        
+        # Calculate traditional match score
         expanded_skills = set()
         for skill in user_skills:
             expanded_skills.add(skill)
-            # Add related terms from tech_keywords
             for category, terms in self.tech_keywords.items():
                 if skill in terms or skill == category or any(term in skill for term in terms):
                     expanded_skills.update(terms)
@@ -96,78 +95,29 @@ class GeminiAPI:
         # Calculate matches
         matches = set(hackathon_keywords) & expanded_skills
         
-        if not hackathon_keywords:
-            return 0.0
-        
         # Base score on direct matches
         base_score = len(matches) / max(len(hackathon_keywords), 1)
         
         # Bonus for matching important skills
         bonus = 0
         for skill in matches:
-            # Give higher weight to AI/ML, cloud, and other advanced skills
             if any(term in skill for term in ['ai', 'machine learning', 'cloud', 'blockchain', 'security']):
                 bonus += 0.1
-            # Give medium weight to web/mobile development skills
             elif any(term in skill for term in ['web', 'mobile', 'fullstack', 'frontend', 'backend']):
                 bonus += 0.05
         
         final_score = min(1.0, base_score + bonus)
-        return final_score
-
-    def calculate_evaluation_metrics(self, hackathon_keywords: List[str], user_skills: List[str]) -> Dict[str, float]:
-        # Convert everything to lowercase and clean
-        hackathon_keywords = [k.lower().strip() for k in hackathon_keywords if k]
-        user_skills = [s.lower().strip() for s in user_skills if s]
         
-        # Expand user skills with related terms
-        expanded_skills = set()
-        for skill in user_skills:
-            expanded_skills.add(skill)
-            for category, terms in self.tech_keywords.items():
-                if skill in terms or skill == category or any(term in skill for term in terms):
-                    expanded_skills.update(terms)
-        
-        # Calculate true positives, false positives, and false negatives
-        true_positives = len(set(hackathon_keywords) & expanded_skills)
-        false_positives = len(set(hackathon_keywords) - expanded_skills)
-        false_negatives = len(expanded_skills - set(hackathon_keywords))
-        
-        # Calculate precision
-        precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
-        
-        # Calculate recall
-        recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
-        
-        # Calculate F1 score
-        f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-        
-        # Calculate cosine similarity
-        # Create binary vectors for keywords and skills
-        all_terms = list(set(hackathon_keywords + list(expanded_skills)))
-        hackathon_vector = [1 if term in hackathon_keywords else 0 for term in all_terms]
-        skills_vector = [1 if term in expanded_skills else 0 for term in all_terms]
-        
-        # Calculate dot product
-        dot_product = sum(a * b for a, b in zip(hackathon_vector, skills_vector))
-        
-        # Calculate magnitudes
-        hackathon_magnitude = sum(a ** 2 for a in hackathon_vector) ** 0.5
-        skills_magnitude = sum(b ** 2 for b in skills_vector) ** 0.5
-        
-        # Calculate cosine similarity
-        cosine_similarity = dot_product / (hackathon_magnitude * skills_magnitude) if (hackathon_magnitude * skills_magnitude) > 0 else 0
-        
-        # Calculate accuracy
-        total_terms = len(all_terms)
-        accuracy = (true_positives + (total_terms - (false_positives + false_negatives))) / total_terms if total_terms > 0 else 0
+        # Combine traditional score with SBERT score
+        combined_score = (final_score + sbert_results['overall_similarity']) / 2
         
         return {
-            "precision": precision,
-            "recall": recall,
-            "f1_score": f1_score,
-            "cosine_similarity": cosine_similarity,
-            "accuracy": accuracy
+            "match_score": combined_score,
+            "sbert_similarity": sbert_results['overall_similarity'],
+            "skill_matches": sbert_results['skill_matches'],
+            "precision": sbert_results['precision'],
+            "recall": sbert_results['recall'],
+            "f1_score": sbert_results['f1_score']
         }
 
     def analyze_hackathons(self, hackathons: List[Dict], user_skills: List[str]) -> List[Dict]:
@@ -190,14 +140,11 @@ class GeminiAPI:
                     requirement_keywords
                 ))
                 
-                # Calculate match score
-                match_score = self.calculate_match_score(all_keywords, user_skills)
-                
-                # Calculate evaluation metrics
-                metrics = self.calculate_evaluation_metrics(all_keywords, user_skills)
+                # Calculate match score with SBERT integration
+                match_results = self.calculate_match_score(all_keywords, user_skills)
                 
                 # Only include hackathons with some skill match
-                if match_score > 0:
+                if match_results["match_score"] > 0:
                     recommendations.append({
                         "title": hackathon["title"],
                         "description": hackathon["description"],
@@ -206,8 +153,15 @@ class GeminiAPI:
                         "criteria": hackathon.get('criteria', ""),
                         "deadline": hackathon.get('deadline', "No deadline specified"),
                         "keywords": all_keywords,
-                        "match_score": match_score,
-                        "evaluation_metrics": metrics
+                        "match_score": match_results["match_score"],
+                        "evaluation_metrics": {
+                            "precision": match_results["precision"],
+                            "recall": match_results["recall"],
+                            "f1_score": match_results["f1_score"],
+                            "cosine_similarity": match_results["sbert_similarity"],
+                            "accuracy": match_results["match_score"]
+                        },
+                        "skill_matches": match_results["skill_matches"]
                     })
             except Exception as e:
                 print(f"Error processing hackathon: {e}")

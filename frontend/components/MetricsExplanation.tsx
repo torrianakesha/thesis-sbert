@@ -10,9 +10,12 @@ interface MetricsExplanationProps {
     cosine_similarity: number;
     accuracy: number;
   };
+  skill_matches: {
+    [key: string]: Array<[string, number]>;
+  };
 }
 
-export default function MetricsExplanation({ isOpen, onClose, metrics }: MetricsExplanationProps) {
+export default function MetricsExplanation({ isOpen, onClose, metrics, skill_matches }: MetricsExplanationProps) {
   if (!isOpen) return null;
 
   return (
@@ -97,6 +100,31 @@ export default function MetricsExplanation({ isOpen, onClose, metrics }: Metrics
               <p className="text-sm text-gray-500 mt-2">
                 Formula: (True Positives + True Negatives) / Total Skills
               </p>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Skill Matches</h3>
+              <p className="text-gray-600 mb-4">
+                Below are the semantic matches between your skills and the hackathon's requirements,
+                calculated using SBERT (Sentence-BERT) for better understanding of skill relevance.
+              </p>
+              <div className="space-y-4">
+                {Object.entries(skill_matches).map(([skill, matches]) => (
+                  <div key={skill} className="border-l-4 border-blue-500 pl-4">
+                    <h4 className="font-medium text-gray-800">{skill}</h4>
+                    <div className="mt-2 space-y-2">
+                      {matches.map(([match, similarity], index) => (
+                        <div key={index} className="flex justify-between items-center">
+                          <span className="text-gray-600">{match}</span>
+                          <span className="text-blue-600 font-medium">
+                            {Math.round(similarity * 100)}% match
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </motion.div>

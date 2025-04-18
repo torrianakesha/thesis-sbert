@@ -47,7 +47,7 @@ export default function Recommendations() {
             <div className={styles.skills}>
               <h3>Required Skills:</h3>
               <ul>
-                {hackathon.required_skills.map((skill, i) => (
+                {hackathon.required_skills && Array.isArray(hackathon.required_skills) && hackathon.required_skills.map((skill, i) => (
                   <li key={i}>{skill}</li>
                 ))}
               </ul>
