@@ -11,7 +11,7 @@ interface User {
 }
 
 export default function Settings() {
-  const router = useRouter();
+  const router = useRouter(); 
   const [user, setUser] = useState<User | null>(null);
   const [username, setUsername] = useState('');
   const [skills, setSkills] = useState('');

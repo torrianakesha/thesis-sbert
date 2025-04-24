@@ -30,6 +30,9 @@ interface Hackathon {
   embeddings?: number[];
   vector?: number[];
   text_embedding?: number[];
+  sbert_embedding?: number[];
+  sentence_embedding?: number[];
+  document_embedding?: number[];
   Countdown?: string[] | string;
   KeywordsFromCSV?: string[];
 }
@@ -143,8 +146,29 @@ export default function Recommendations() {
   // Helper function to estimate token count
   const estimateTokenCount = (text: string | undefined): number => {
     if (!text) return 0;
-    // Rough approximation: split by whitespace and punctuation
-    return text.split(/[\s,.;:!?()\[\]{}""'']+/).filter(Boolean).length;
+    
+    // Better approximation: 
+    // 1. Split by whitespace and punctuation
+    // 2. Filter out empty strings
+    // 3. Count special tokens like URLs, technical terms, etc. as multiple tokens
+    const tokens = text.split(/[\s,.;:!?()\[\]{}""'']+/).filter(Boolean);
+    
+    // Count some special cases that might be underestimated
+    let additionalTokens = 0;
+    
+    // URLs and technical terms tend to be tokenized into more tokens than words
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = text.match(urlRegex) || [];
+    additionalTokens += urls.length * 2; // URLs typically break into multiple tokens
+    
+    // Count code blocks or technical terms as additional tokens
+    const codeTerms = tokens.filter(token => 
+      /[A-Za-z0-9_]+\.[A-Za-z0-9_]+/.test(token) || // matches patterns like "object.property"
+      /[A-Za-z0-9]+[A-Z][A-Za-z0-9]*/.test(token)   // matches camelCase
+    ).length;
+    additionalTokens += codeTerms;
+    
+    return tokens.length + additionalTokens;
   };
 
   // CSV export function
@@ -187,12 +211,24 @@ export default function Recommendations() {
       const displayedTokenCount = estimateTokenCount(hackathon.description);
       
       // Estimate original token count (if truncated, actual count would be higher)
-      const originalTokenCount = isDescriptionTruncated === 'true' && hackathon.originalDescription
-        ? estimateTokenCount(hackathon.originalDescription)
-        : displayedTokenCount;
+      let originalTokenCount = displayedTokenCount;
+      if (isDescriptionTruncated === 'true') {
+        if (hackathon.originalDescription) {
+          // If we have the original description, use its token count
+          originalTokenCount = estimateTokenCount(hackathon.originalDescription);
+        } else {
+          // Otherwise, make an educated guess: add ~25% for truncated descriptions
+          originalTokenCount = Math.ceil(displayedTokenCount * 1.25);
+        }
+      }
       
       // Handle embeddings - check multiple possible embedding fields
       let embedding: number[] = [];
+      
+      // Log first hackathon to debug what fields are available
+      if (hackathon === recommendations[0]) {
+        console.log("Debugging first hackathon:", Object.keys(hackathon));
+      }
       
       // Try to access embedding from any possible source with more comprehensive checks
       if (hackathon.embedding && Array.isArray(hackathon.embedding) && hackathon.embedding.length > 0) {
@@ -205,6 +241,26 @@ export default function Recommendations() {
         embedding = hackathon.vector;
       } else if (hackathon.text_embedding && Array.isArray(hackathon.text_embedding) && hackathon.text_embedding.length > 0) {
         embedding = hackathon.text_embedding;
+      } else if (hackathon.sbert_embedding && Array.isArray(hackathon.sbert_embedding) && hackathon.sbert_embedding.length > 0) {
+        embedding = hackathon.sbert_embedding;
+      } else if (hackathon.sentence_embedding && Array.isArray(hackathon.sentence_embedding) && hackathon.sentence_embedding.length > 0) {
+        embedding = hackathon.sentence_embedding;
+      } else if (hackathon.document_embedding && Array.isArray(hackathon.document_embedding) && hackathon.document_embedding.length > 0) {
+        embedding = hackathon.document_embedding;
+      } else {
+        // Auto-detect any field that looks like an embedding vector
+        for (const key in hackathon) {
+          const value = (hackathon as any)[key];
+          if (
+            Array.isArray(value) && 
+            value.length > 50 && // Embeddings typically have many dimensions
+            value.every(item => typeof item === 'number')
+          ) {
+            console.log(`Found potential embedding in field: ${key}`);
+            embedding = value;
+            break;
+          }
+        }
       }
       
       // Flag if embedding is available
@@ -349,24 +405,43 @@ export default function Recommendations() {
               Profile
             </Link>
           </motion.div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg
-                     hover:bg-blue-600 transition-colors duration-200 disabled:opacity-50"
-          >
-            {isRefreshing ? (
-              <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></div>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <div className="flex space-x-3 mb-6">
+            <button 
+              onClick={handleRefresh} 
+              disabled={isRefreshing}
+              className="flex items-center px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md transition-colors"
+            >
+              <svg className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-            )}
-            Refresh
-          </motion.button>
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            
+            <button
+              onClick={() => setShowMetrics(!showMetrics)}
+              className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-md transition-colors"
+            >
+              {showMetrics ? 'Hide Metrics Info' : 'Show Metrics Info'}
+            </button>
+            
+            <button
+              onClick={() => exportToCSV()}
+              className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-800 rounded-md transition-colors"
+            >
+              Export to CSV
+            </button>
+            
+            <Link href="/truncation-visualizer">
+              <button
+                className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-md transition-colors flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Text Truncation Tool
+              </button>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -429,18 +504,6 @@ export default function Recommendations() {
                   </svg>
                   Edit Profile
                 </Link>
-                
-                <button
-                  onClick={exportToCSV}
-                  className="w-full mt-3 inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg
-                           hover:bg-green-700 transition-colors duration-200 text-sm"
-                  disabled={recommendations.length === 0}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Export to CSV
-                </button>
               </div>
             </div>
           ) : (
