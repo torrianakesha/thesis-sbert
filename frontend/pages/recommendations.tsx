@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from '../styles/Recommendations.module.css';
 import MetricsExplanation from '../components/MetricsExplanation';
+import TruncationPopup from '../components/TruncationPopup';
 
 interface Hackathon {
   title: string;
@@ -53,6 +54,8 @@ export default function Recommendations() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedHackathon, setSelectedHackathon] = useState<Hackathon | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [showTruncationPopup, setShowTruncationPopup] = useState(false);
+  const [hackathonForTruncation, setHackathonForTruncation] = useState<Hackathon | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   // Helper function to format match score percentage
@@ -367,6 +370,13 @@ export default function Recommendations() {
     router.push(`/hackathon/${index}`);
   };
 
+  // Add this function to handle the truncation popup
+  const handleTruncationAnalysis = (e: React.MouseEvent, hackathon: Hackathon) => {
+    e.stopPropagation();
+    setHackathonForTruncation(hackathon);
+    setShowTruncationPopup(true);
+  };
+
   if (loading && !isRefreshing) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -611,6 +621,19 @@ export default function Recommendations() {
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
+                      onClick={(e) => handleTruncationAnalysis(e, hackathon)}
+                      className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 
+                               transition-colors duration-200 text-sm font-medium flex items-center gap-1.5"
+                      title="Analyze text truncation impact on this description"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Analyze Truncation
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedHackathon(hackathon);
@@ -657,6 +680,7 @@ export default function Recommendations() {
         </div>
       </div>
 
+      {/* Metrics Explanation Dialog */}
       {selectedHackathon && (
         <MetricsExplanation
           isOpen={showMetrics}
@@ -666,6 +690,20 @@ export default function Recommendations() {
           }}
           metrics={selectedHackathon.evaluation_metrics}
           skill_matches={selectedHackathon.skill_matches}
+        />
+      )}
+
+      {/* Truncation Analysis Popup */}
+      {hackathonForTruncation && (
+        <TruncationPopup
+          isOpen={showTruncationPopup}
+          onClose={() => {
+            setShowTruncationPopup(false);
+            setHackathonForTruncation(null);
+          }}
+          description={hackathonForTruncation.description}
+          originalDescription={hackathonForTruncation.originalDescription}
+          maxLength={200} // Set a reasonable max length
         />
       )}
     </motion.div>

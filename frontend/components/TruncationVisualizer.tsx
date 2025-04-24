@@ -658,7 +658,7 @@ const TruncationVisualizer: React.FC = () => {
               onChange={(e) => setSimulationMethod(e.target.value)}
               disabled={isSimulating}
             >
-              <option value="sliding_window">Sliding Window</option>
+              <option value="sliding_window">Sliding Window + Hierarchical</option>
               <option value="sbert_viz">SBERT Visualization</option>
             </select>
             
@@ -749,7 +749,7 @@ const TruncationVisualizer: React.FC = () => {
             
             {activeTab === 'sliding_window' && (
               <div>
-                <h3 className="font-medium text-lg mb-2">Sliding Window Truncation</h3>
+                <h3 className="font-medium text-lg mb-2">Sliding Window + Hierarchical Truncation</h3>
                 {visualizationData && visualizationData.sliding_window ? (
                   <>
                     <p className="whitespace-pre-wrap mb-4 border p-3 bg-gray-50 rounded">
