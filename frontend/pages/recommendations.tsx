@@ -36,6 +36,7 @@ interface Hackathon {
   document_embedding?: number[];
   Countdown?: string[] | string;
   KeywordsFromCSV?: string[];
+  initialMode?: 'analyze' | 'simulate';
 }
 
 interface User {
@@ -60,12 +61,14 @@ export default function Recommendations() {
 
   // Helper function to format match score percentage
   const formatMatchScore = (score: number): string => {
-    // Cap at 100%
-    const cappedScore = Math.min(score, 1) * 100;
-    // Format with up to 2 decimal places
-    const formatted = cappedScore.toFixed(2);
-    // Remove trailing zeros and decimal point if not needed
-    return parseFloat(formatted).toString() + '%';
+    // Check if score is already a percentage (0-100 range)
+    const isPercentage = score > 1;
+    
+    // Convert to percentage if needed
+    const percentScore = isPercentage ? score : score * 100;
+    
+    // Format with up to 1 decimal place and remove trailing zeros
+    return percentScore.toFixed(1).replace(/\.0$/, '') + '%';
   };
 
   // Helper function to calculate and format countdown
@@ -376,6 +379,13 @@ export default function Recommendations() {
     setHackathonForTruncation(hackathon);
     setShowTruncationPopup(true);
   };
+  
+  // Add this function to handle simulation mode
+  const handleTruncationSimulation = (e: React.MouseEvent, hackathon: Hackathon) => {
+    e.stopPropagation();
+    setHackathonForTruncation({...hackathon, initialMode: 'simulate'});
+    setShowTruncationPopup(true);
+  };
 
   if (loading && !isRefreshing) {
     return (
@@ -536,8 +546,8 @@ export default function Recommendations() {
                 <div className="flex justify-between items-start">
                   <h2 className="text-xl font-bold mb-2 text-gray-800">{hackathon.title}</h2>
                   <span className={`${styles.matchBadge} ${
-                    hackathon.match_score > 0.7 ? styles.matchBadgeHigh :
-                    hackathon.match_score > 0.4 ? styles.matchBadgeMedium :
+                    hackathon.match_score >= 70 ? styles.matchBadgeHigh :
+                    hackathon.match_score >= 40 ? styles.matchBadgeMedium :
                     styles.matchBadgeLow
                   }`}>
                     Match: {formatMatchScore(hackathon.match_score)}
@@ -629,8 +639,24 @@ export default function Recommendations() {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
-                      Analyze Truncation
+                      Analyze
                     </motion.button>
+                    
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={(e) => handleTruncationSimulation(e, hackathon)}
+                      className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 
+                               transition-colors duration-200 text-sm font-medium flex items-center gap-1.5"
+                      title="Simulate the truncation process on this description"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Simulate
+                    </motion.button>
+                    
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
@@ -646,15 +672,16 @@ export default function Recommendations() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                       </svg>
-                      View Metrics
+                      Metrics
                     </motion.button>
+                    
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => saveAndNavigateToHackathon(hackathon, index)}
                       className="px-3 py-1.5 text-blue-500 hover:text-blue-700 font-medium text-sm"
                     >
-                      View Details →
+                      Details →
                     </motion.button>
                   </div>
                 </div>
@@ -704,6 +731,7 @@ export default function Recommendations() {
           description={hackathonForTruncation.description}
           originalDescription={hackathonForTruncation.originalDescription}
           maxLength={200} // Set a reasonable max length
+          initialMode={hackathonForTruncation.initialMode as 'analyze' | 'simulate'}
         />
       )}
     </motion.div>
