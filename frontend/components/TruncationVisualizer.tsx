@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
+interface Metrics {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1_score: number;
+}
+
 interface TruncationData {
   original: {
     text: string;
@@ -17,6 +24,7 @@ interface TruncationData {
       mean_pooling: number;
       attention_pooling: number;
     };
+    metrics?: Metrics;
   };
   sbert_viz: {
     text: string;
@@ -25,6 +33,7 @@ interface TruncationData {
     chunks: string[];
     embeddings_preview: number[][];
     reduction_percent: number;
+    metrics?: Metrics;
   };
   sentence?: {
     text: string;
@@ -52,8 +61,9 @@ const TruncationVisualizer: React.FC = () => {
   const [simulationText, setSimulationText] = useState<string>('');
   const [simulationStep, setSimulationStep] = useState<number>(0);
   const [simulationMaxSteps, setSimulationMaxSteps] = useState<number>(0);
-  const [simulationSpeed, setSimulationSpeed] = useState<number>(100); // ms between steps
+  const [simulationSpeed, setSimulationSpeed] = useState<number>(400); // ms between steps
   const [windowSize, setWindowSize] = useState<number>(30); // Sliding window size
+  const [isSimulatingBoth, setIsSimulatingBoth] = useState<boolean>(false);
 
   const handleVisualize = async () => {
     if (!inputText.trim()) {
@@ -108,6 +118,14 @@ const TruncationVisualizer: React.FC = () => {
         // Fix semantic data if needed
         if (data.semantic && !data.semantic.sliding_window_similarity && data.semantic.word_similarity) {
           data.semantic.sliding_window_similarity = data.semantic.word_similarity;
+        }
+        
+        if (data.sliding_window) {
+          data.sliding_window.metrics = computeMetrics(data.original.text, data.sliding_window.text);
+        }
+        
+        if (data.sbert_viz) {
+          data.sbert_viz.metrics = computeMetrics(data.original.text, data.sbert_viz.text);
         }
         
         setVisualizationData(data);
@@ -366,15 +384,17 @@ const TruncationVisualizer: React.FC = () => {
     // If we've reached the end of simulation
     if (simulationStep >= simulationMaxSteps) {
       // Set final state based on method
-      if (simulationMethod === 'sliding_window') {
+      if (simulationMethod === 'sliding_window' || simulationMethod === 'both') {
         setSimulationText(visualizationData.sliding_window.text);
-      } else if (simulationMethod === 'sbert_viz') {
+      }
+      if (simulationMethod === 'sbert_viz' || simulationMethod === 'both') {
         setSimulationText(visualizationData.sbert_viz.text);
       }
       
       // End simulation after a pause
       const timer = setTimeout(() => {
         setIsSimulating(false);
+        setIsSimulatingBoth(false);
       }, 1500);
       
       return () => clearTimeout(timer);
@@ -383,7 +403,7 @@ const TruncationVisualizer: React.FC = () => {
     // Calculate the current truncation state
     const progress = simulationStep / simulationMaxSteps;
     
-    if (simulationMethod === 'sliding_window') {
+    if (simulationMethod === 'sliding_window' || simulationMethod === 'both') {
       // Sliding window: simulate the window moving through the text
       const paragraphs = originalText.split(/\n\n+/);
       const sentences = originalText.split(/(?<=[.!?])\s+/);
@@ -467,7 +487,7 @@ const TruncationVisualizer: React.FC = () => {
         setSimulationText(finalText);
       }
     }
-    else if (simulationMethod === 'sbert_viz') {
+    else if (simulationMethod === 'sbert_viz' || simulationMethod === 'both') {
       // SBERT visualization simulation
       if (!visualizationData.sbert_viz) {
         setSimulationText("SBERT visualization data not available");
@@ -553,13 +573,55 @@ const TruncationVisualizer: React.FC = () => {
     }, simulationSpeed);
     
     return () => clearTimeout(timer);
-  }, [isSimulating, simulationStep, simulationMethod, simulationMaxSteps, visualizationData, maxLength, simulationSpeed, windowSize]);
+  }, [isSimulating, simulationStep, simulationMethod, simulationMaxSteps, visualizationData, maxLength, simulationSpeed, windowSize, isSimulatingBoth]);
 
   const tabs = [
     { id: 'original', label: 'Original' },
     { id: 'sliding_window', label: 'Sliding Window' },
-    { id: 'sbert_viz', label: 'SBERT Visualization' }
+    { id: 'sbert_viz', label: 'SBERT Visualization' },
+    { id: 'compare_methods', label: 'Compare Methods' }
   ];
+
+  // Add this function to compute metrics
+  const computeMetrics = (originalText: string, truncatedText: string): Metrics => {
+    // Split texts into words and remove duplicates
+    const originalWords = new Set(originalText.toLowerCase().split(/\s+/).filter(word => word.length > 0));
+    const truncatedWords = new Set(truncatedText.toLowerCase().split(/\s+/).filter(word => word.length > 0));
+    
+    // Calculate true positives, false positives, and false negatives
+    let truePositives = 0;
+    let falsePositives = 0;
+    let falseNegatives = 0;
+    
+    // Count true positives and false positives
+    truncatedWords.forEach(word => {
+      if (originalWords.has(word)) {
+        truePositives++;
+      } else {
+        falsePositives++;
+      }
+    });
+    
+    // Count false negatives
+    originalWords.forEach(word => {
+      if (!truncatedWords.has(word)) {
+        falseNegatives++;
+      }
+    });
+    
+    // Calculate metrics
+    const precision = truePositives / (truePositives + falsePositives) || 0;
+    const recall = truePositives / (truePositives + falseNegatives) || 0;
+    const f1Score = 2 * (precision * recall) / (precision + recall) || 0;
+    const accuracy = truePositives / originalWords.size || 0;
+    
+    return {
+      accuracy: Math.round(accuracy * 100) / 100,
+      precision: Math.round(precision * 100) / 100,
+      recall: Math.round(recall * 100) / 100,
+      f1_score: Math.round(f1Score * 100) / 100
+    };
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
@@ -732,7 +794,7 @@ const TruncationVisualizer: React.FC = () => {
                 <p className="whitespace-pre-wrap mb-4 border p-3 bg-gray-50 rounded">{visualizationData.original.text}</p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="font-medium">Length:</span> {visualizationData.original.length} characters
+                    <span className="font-medium">Length:</span> {visualizationData.original.length} tokens
                   </div>
                   <div>
                     <span className="font-medium">Tokens:</span> ~{visualizationData.original.tokens}
@@ -757,7 +819,7 @@ const TruncationVisualizer: React.FC = () => {
                     </p>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <span className="font-medium">Length:</span> {visualizationData.sliding_window.length} characters
+                        <span className="font-medium">Length:</span> {visualizationData.sliding_window.length} tokens
                       </div>
                       <div>
                         <span className="font-medium">Tokens:</span> ~{visualizationData.sliding_window.tokens}
@@ -766,11 +828,11 @@ const TruncationVisualizer: React.FC = () => {
                         <span className="font-medium">Reduction:</span> {visualizationData.sliding_window.reduction_percent}%
                       </div>
                       <div>
-                        <span className="font-medium">Window Size:</span> {windowSize} characters
+                        <span className="font-medium">Window Size:</span> {windowSize} tokens
                       </div>
                       {visualizationData.semantic && visualizationData.semantic.sliding_window_similarity !== undefined && (
                         <div>
-                          <span className="font-medium">Semantic similarity:</span>
+                          <span className="font-medium">Cosign similarity:</span>
                           <span style={{ color: getColorGradient(visualizationData.semantic.sliding_window_similarity), marginLeft: '4px', fontWeight: 'bold' }}>
                             {Math.round(visualizationData.semantic.sliding_window_similarity * 100)}%
                           </span>
@@ -817,6 +879,43 @@ const TruncationVisualizer: React.FC = () => {
                             <p className="text-xs text-gray-600 mt-1">
                               Weighted average based on relevance to the truncated text
                             </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Metrics Section */}
+                    {visualizationData.sliding_window.metrics && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium mb-2">Performance Metrics</h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div className="relative group">
+                            <span className="font-medium">Accuracy:</span>
+                            <span className="ml-2">{visualizationData.sliding_window.metrics.accuracy}</span>
+                            <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              Ratio of correctly preserved words to total words in the original text
+                            </div>
+                          </div>
+                          <div className="relative group">
+                            <span className="font-medium">Precision:</span>
+                            <span className="ml-2">{visualizationData.sliding_window.metrics.precision}</span>
+                            <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              Ratio of preserved words that are relevant to the original text
+                            </div>
+                          </div>
+                          <div className="relative group">
+                            <span className="font-medium">Recall:</span>
+                            <span className="ml-2">{visualizationData.sliding_window.metrics.recall}</span>
+                            <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              Ratio of relevant words from the original text that were preserved
+                            </div>
+                          </div>
+                          <div className="relative group">
+                            <span className="font-medium">F1 Score:</span>
+                            <span className="ml-2">{visualizationData.sliding_window.metrics.f1_score}</span>
+                            <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              Harmonic mean of precision and recall, balancing both metrics
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -901,7 +1000,7 @@ const TruncationVisualizer: React.FC = () => {
                   </div>
                   
                   <div className="mt-6">
-                    <h4 className="text-lg font-medium mb-2">Semantic Similarity</h4>
+                    <h4 className="text-lg font-medium mb-2">Cosign Similarity</h4>
                     <p className="text-gray-700 mb-2">
                       SBERT allows comparing the semantic meaning between texts:
                     </p>
@@ -917,6 +1016,283 @@ const TruncationVisualizer: React.FC = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {activeTab === 'compare_methods' && (
+              <div className="space-y-8">
+                <div className="flex justify-center mb-6">
+                  <button
+                    className="px-6 py-3 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors duration-200 flex items-center gap-2"
+                    onClick={() => {
+                      if (isSimulatingBoth) {
+                        setIsSimulatingBoth(false);
+                        setIsSimulating(false);
+                      } else {
+                        setIsSimulatingBoth(true);
+                        setSimulationMethod('both');
+                        startSimulation();
+                      }
+                    }}
+                    disabled={isSimulating && !isSimulatingBoth}
+                  >
+                    {isSimulatingBoth ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Stop Both Simulations
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        Run Both Methods
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Sliding Window Method */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-blue-500">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-semibold text-blue-600">Sliding Window Method</h3>
+                      <button
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm"
+                        onClick={() => {
+                          setSimulationMethod('sliding_window');
+                          startSimulation();
+                        }}
+                        disabled={isSimulating && !isSimulatingBoth}
+                      >
+                        {isSimulating && simulationMethod === 'sliding_window' ? 'Stop' : 'Start'}
+                      </button>
+                    </div>
+                    
+                    <div className="mb-6">
+                      <h4 className="text-lg font-medium mb-2">Processing Steps</h4>
+                      <div className="bg-blue-50 p-4 rounded-md">
+                        <ol className="list-decimal list-inside space-y-2 text-sm">
+                          <li>Analyzes text structure (paragraphs, sentences)</li>
+                          <li>Extracts key sentences from each paragraph</li>
+                          <li>Uses sliding window to maintain local context</li>
+                          <li>Combines beginning text with key sentences</li>
+                          <li>Preserves document hierarchy and flow</li>
+                        </ol>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <h4 className="text-lg font-medium mb-2">Results</h4>
+                      {visualizationData && visualizationData.sliding_window && (
+                        <div className="space-y-4">
+                          <div className="bg-blue-50 p-4 rounded-md">
+                            <p className="text-sm font-medium mb-2">Truncated Text:</p>
+                            <p className="text-sm whitespace-pre-wrap">{visualizationData.sliding_window.text}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="font-medium">Length:</span> {visualizationData.sliding_window.length} tokens
+                            </div>
+                            <div>
+                              <span className="font-medium">Tokens:</span> ~{visualizationData.sliding_window.tokens}
+                            </div>
+                            <div>
+                              <span className="font-medium">Reduction:</span> {visualizationData.sliding_window.reduction_percent}%
+                            </div>
+                            {visualizationData.semantic && (
+                              <div>
+                                <span className="font-medium">Cosign Similarity:</span>
+                                <span style={{ color: getColorGradient(visualizationData.semantic.sliding_window_similarity) }}>
+                                  {Math.round(visualizationData.semantic.sliding_window_similarity * 100)}%
+                                </span>
+                              </div>
+                            )}
+                            {visualizationData.sliding_window.metrics && (
+                              <>
+                                <div className="relative group">
+                                  <span className="font-medium">Accuracy:</span>
+                                  <span className="ml-2">{visualizationData.sliding_window.metrics.accuracy}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of correctly preserved words to total words in the original text
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">Precision:</span>
+                                  <span className="ml-2">{visualizationData.sliding_window.metrics.precision}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of preserved words that are relevant to the original text
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">Recall:</span>
+                                  <span className="ml-2">{visualizationData.sliding_window.metrics.recall}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of relevant words from the original text that were preserved
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">F1 Score:</span>
+                                  <span className="ml-2">{visualizationData.sliding_window.metrics.f1_score}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Harmonic mean of precision and recall, balancing both metrics
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SBERT Method */}
+                  <div className="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-semibold text-green-600">SBERT Method</h3>
+                      <button
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors duration-200 text-sm"
+                        onClick={() => {
+                          setSimulationMethod('sbert_viz');
+                          startSimulation();
+                        }}
+                        disabled={isSimulating && !isSimulatingBoth}
+                      >
+                        {isSimulating && simulationMethod === 'sbert_viz' ? 'Stop' : 'Start'}
+                      </button>
+                    </div>
+                    
+                    <div className="mb-6">
+                      <h4 className="text-lg font-medium mb-2">Processing Steps</h4>
+                      <div className="bg-green-50 p-4 rounded-md">
+                        <ol className="list-decimal list-inside space-y-2 text-sm">
+                          <li>Splits text into sentences</li>
+                          <li>Generates embeddings for each sentence</li>
+                          <li>Calculates semantic similarity between sentences</li>
+                          <li>Selects sentences based on semantic importance</li>
+                          <li>Combines selected sentences into final text</li>
+                        </ol>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <h4 className="text-lg font-medium mb-2">Results</h4>
+                      {visualizationData && visualizationData.sbert_viz && (
+                        <div className="space-y-4">
+                          <div className="bg-green-50 p-4 rounded-md">
+                            <p className="text-sm font-medium mb-2">Truncated Text:</p>
+                            <p className="text-sm whitespace-pre-wrap">{visualizationData.sbert_viz.text}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="font-medium">Length:</span> {visualizationData.sbert_viz.length} tokens
+                            </div>
+                            <div>
+                              <span className="font-medium">Tokens:</span> ~{visualizationData.sbert_viz.tokens}
+                            </div>
+                            <div>
+                              <span className="font-medium">Reduction:</span> {visualizationData.sbert_viz.reduction_percent}%
+                            </div>
+                            {visualizationData.semantic && (
+                              <div>
+                                <span className="font-medium">Cosign Similarity:</span>
+                                <span style={{ color: getColorGradient(visualizationData.semantic.sbert_similarity) }}>
+                                  {Math.round(visualizationData.semantic.sbert_similarity * 100)}%
+                                </span>
+                              </div>
+                            )}
+                            {visualizationData.sbert_viz.metrics && (
+                              <>
+                                <div className="relative group">
+                                  <span className="font-medium">Accuracy:</span>
+                                  <span className="ml-2">{visualizationData.sbert_viz.metrics.accuracy}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of correctly preserved words to total words in the original text
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">Precision:</span>
+                                  <span className="ml-2">{visualizationData.sbert_viz.metrics.precision}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of preserved words that are relevant to the original text
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">Recall:</span>
+                                  <span className="ml-2">{visualizationData.sbert_viz.metrics.recall}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Ratio of relevant words from the original text that were preserved
+                                  </div>
+                                </div>
+                                <div className="relative group">
+                                  <span className="font-medium">F1 Score:</span>
+                                  <span className="ml-2">{visualizationData.sbert_viz.metrics.f1_score}</span>
+                                  <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                    Harmonic mean of precision and recall, balancing both metrics
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-6 rounded-lg">
+                  <h3 className="text-lg font-semibold mb-4">Method Comparison</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium mb-2">Sliding Window Advantages</h4>
+                      <ul className="list-disc pl-5 space-y-2 text-gray-700">
+                        <li>Preserves document structure and hierarchy</li>
+                        <li>Maintains topic sentences and key points</li>
+                        <li>Better for long-form content</li>
+                        <li>More consistent with human reading patterns</li>
+                      </ul>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-medium mb-2">SBERT Advantages</h4>
+                      <ul className="list-disc pl-5 space-y-2 text-gray-700">
+                        <li>Focuses purely on semantic meaning</li>
+                        <li>Better at identifying key concepts</li>
+                        <li>More flexible with text structure</li>
+                        <li>Faster processing time</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-2">Performance Comparison</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-white p-4 rounded-lg shadow">
+                        <h5 className="font-medium mb-2">Sliding Window</h5>
+                        <ul className="space-y-2 text-sm">
+                          <li>✅ Better context preservation</li>
+                          <li>✅ More accurate for structured content</li>
+                          <li>❌ Slower processing time</li>
+                          <li>❌ More complex implementation</li>
+                        </ul>
+                      </div>
+                      
+                      <div className="bg-white p-4 rounded-lg shadow">
+                        <h5 className="font-medium mb-2">SBERT</h5>
+                        <ul className="space-y-2 text-sm">
+                          <li>✅ Faster processing</li>
+                          <li>✅ Simpler implementation</li>
+                          <li>❌ May lose context</li>
+                          <li>❌ Less effective for structured content</li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
