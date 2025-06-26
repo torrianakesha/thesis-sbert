@@ -11,7 +11,7 @@ import os
 import numpy as np
 import re
 
-from sbert import SBERTModel  # ✅ Your model logic
+from sbert import SBERTModel  # Your model logic
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -26,7 +26,7 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 bert_model = None
 hackathons_cache = None
 
-# ✅ Function to load and clean CSV data
+# Function to load and clean CSV data
 def load_raw_hackathons(csv_name: str):
     csv_path = os.path.join(os.path.dirname(__file__), csv_name)
     if not os.path.exists(csv_path):
@@ -53,30 +53,30 @@ def load_raw_hackathons(csv_name: str):
 
     return df.to_dict(orient="records")
 
-# ✅ FastAPI app with lifespan handler
+# FastAPI app with lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global bert_model, hackathons_cache
     try:
         print("📂 Loading hackathons...")
         hackathons_cache = load_raw_hackathons("Final Hackathon Dataset.csv")
-        print(f"✅ {len(hackathons_cache)} hackathons loaded")
+        print(f" {len(hackathons_cache)} hackathons loaded")
 
-        print("🚀 Loading SBERT model...")
+        print("Loading SBERT model...")
         bert_model = SBERTModel()
-        print("✅ SBERT model initialized")
+        print("SBERT model initialized")
 
         with engine.begin() as conn:
             Base.metadata.create_all(bind=conn)
 
         yield  # Important for FastAPI lifespan
     except Exception as e:
-        print(f"❌ Startup error: {e}")
+        print(f"Startup error: {e}")
         yield  # Prevent FastAPI crash
 
 app = FastAPI(lifespan=lifespan)
 
-# ✅ Enable CORS for frontend
+# Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Adjust for deployment
@@ -85,7 +85,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ✅ SQLAlchemy user model
+# SQLAlchemy user model
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -94,7 +94,7 @@ class User(Base):
     password = Column(String)
     skills = Column(JSON)
 
-# ✅ Dependency
+# Dependency
 def get_db():
     db = SessionLocal()
     try:
@@ -102,7 +102,7 @@ def get_db():
     finally:
         db.close()
 
-# ✅ Register
+# Register
 @app.post("/users/")
 async def create_user(user_data: dict, db: Session = Depends(get_db)):
     existing = db.query(User).filter(
@@ -124,7 +124,7 @@ async def create_user(user_data: dict, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"id": new_user.id, "username": new_user.username}
 
-# ✅ Login
+# Login
 @app.post("/login")
 async def login(user_data: dict, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == user_data["username"]).first()
@@ -132,7 +132,7 @@ async def login(user_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     return {"id": user.id, "username": user.username}
 
-# ✅ Get User
+# Get User
 @app.get("/users/{user_id}")
 async def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
@@ -144,7 +144,7 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
         "skills": user.skills
     }
 
-# ✅ Update User
+# Update User
 @app.put("/users/{user_id}")
 async def update_user(user_id: int, user_data: dict, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
@@ -163,7 +163,7 @@ async def update_user(user_id: int, user_data: dict, db: Session = Depends(get_d
         "skills": user.skills
     }
 
-# ✅ Recommendations
+# Recommendations
 @app.get("/recommendations/{user_id}")
 async def get_recommendations(user_id: int, db: Session = Depends(get_db)):
     global bert_model, hackathons_cache
@@ -182,7 +182,7 @@ async def get_recommendations(user_id: int, db: Session = Depends(get_db)):
         print(f"❌ Recommendation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Service error: {e}")
 
-# ✅ Text Truncation Visualization
+# Text Truncation Visualization
 @app.post("/text-truncation")
 async def visualize_truncation(request_data: dict):
     try:
@@ -367,13 +367,13 @@ async def visualize_truncation(request_data: dict):
         
         return JSONResponse(content=visualization_data)
     except Exception as e:
-        print(f"❌ Truncation visualization failed: {str(e)}")
+        print(f"Truncation visualization failed: {str(e)}")
         return JSONResponse(
             content={"error": f"Failed to process: {str(e)}"}, 
             status_code=500
         )
 
-# ✅ Local Dev Server
+# Local Dev Server
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
